@@ -14,6 +14,7 @@ export default defineConfig({
   server: {
     port: 3000,
     open: true,
+    allowedHosts: ['general-taowar-production.up.railway.app'],
     proxy: {
       '/api': {
         target: 'http://localhost:5001',
