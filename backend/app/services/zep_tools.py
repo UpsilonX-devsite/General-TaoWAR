@@ -1101,23 +1101,28 @@ class ZepToolsService:
         
         将复杂问题分解为多个可以独立检索的子问题
         """
-        system_prompt = """你是一个专业的问题分析专家。你的任务是将一个复杂问题分解为多个可以在模拟世界中独立观察的子问题。
+        system_prompt = """You are a professional question analysis expert. Your task is to decompose a complex question into multiple sub-questions that can be independently searched in the simulation graph.
 
-要求：
-1. 每个子问题应该足够具体，可以在模拟世界中找到相关的Agent行为或事件
-2. 子问题应该覆盖原问题的不同维度（如：谁、什么、为什么、怎么样、何时、何地）
-3. 子问题应该与模拟场景相关
-4. 返回JSON格式：{"sub_queries": ["子问题1", "子问题2", ...]}"""
+CRITICAL RULE:
+The simulation_requirement field contains the name and description of the specific company being assessed. Every sub-question you generate MUST reference that specific company by name. Never generate generic sub-questions that could apply to any company.
 
-        user_prompt = f"""模拟需求背景：
+Requirements:
+1. Each sub-question must explicitly name the company from the simulation_requirement
+2. Sub-questions must cover different dimensions of the query (who, what, why, how, when)
+3. Sub-questions must be specific enough to find relevant agent behaviour in the graph
+4. Return JSON format: {"sub_queries": ["sub-question 1", "sub-question 2", ...]}"""
+
+        user_prompt = f"""SIMULATION REQUIREMENT (contains the specific company being assessed — use this company name in every sub-question):
 {simulation_requirement}
 
-{f"报告上下文：{report_context[:500]}" if report_context else ""}
+{f"Report context: {report_context[:500]}" if report_context else ""}
 
-请将以下问题分解为{max_queries}个子问题：
+Decompose the following question into {max_queries} sub-questions. Every sub-question must explicitly name the company from the simulation requirement above. Do not generate sub-questions about UpsilonX, UPXT, stablecoins, or any other company unless that company is named in the simulation requirement above.
+
+Question to decompose:
 {query}
 
-返回JSON格式的子问题列表。"""
+Return JSON format with the sub-questions list."""
 
         try:
             response = self.llm.chat_json(
