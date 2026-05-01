@@ -1311,11 +1311,13 @@ def start_dd_interrogation():
 
                     for question in domain["questions"]:
                         try:
-                            result = zep.quick_search(
-                                graph_id=graph_id,
-                                query=question,
-                                limit=5
-                            )
+                            company_hint = simulation_requirement.split('\n')[0][:80]
+enriched_query = f"{company_hint} — {question}"
+result = zep.quick_search(
+    graph_id=graph_id,
+    query=enriched_query,
+    limit=5
+)
 
                             facts = result.facts if result.facts else []
                             fact_count = len(facts)
