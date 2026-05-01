@@ -642,6 +642,30 @@ Report title: {report_title}
 Report summary: {report_summary}
 Simulation requirement: {simulation_requirement}
 Current section: {section_title}
+Graph ID: {graph_id}
+
+GRAPH ISOLATION — READ THIS BEFORE ANYTHING ELSE:
+The simulation_requirement field above names the specific
+company being assessed in this simulation. Extract that
+company name now and use it in every tool call you make.
+
+Your first tool call must be a quick_search for the
+company name from simulation_requirement to confirm
+it exists in this graph. If it returns zero results,
+say so explicitly — do not substitute content from
+any other company.
+
+If any tool call returns facts about UpsilonX, UPXT,
+stablecoins, reserve-backed tokens, or RWA and those
+concepts are NOT in the simulation_requirement above,
+discard those results and search again using the
+correct company name.
+
+You are forbidden from writing about UpsilonX or any
+UpsilonX product unless the simulation_requirement
+explicitly names UpsilonX as the company being assessed.
+
+CRITICAL RULES — violating any of these is a failure:
 
 CRITICAL RULES — violating any of these is a failure:
 
@@ -1236,6 +1260,7 @@ class ReportAgent:
             simulation_requirement=self.simulation_requirement,
             section_title=section.title,
             tools_description=self._get_tools_description(),
+            graph_id=self.graph_id,
         )
         system_prompt = f"{system_prompt}\n\n{get_language_instruction()}"
 
