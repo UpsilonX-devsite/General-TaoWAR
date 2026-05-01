@@ -18,6 +18,7 @@ from ..utils.logger import get_logger
 from ..utils.locale import t, get_locale, set_locale
 
 logger = get_logger('mirofish.api.report')
+dd_progress_store: dict = {}
 
 
 # ============== 报告生成接口 ==============
@@ -1018,3 +1019,525 @@ def get_graph_statistics_tool():
             "error": str(e),
             "traceback": traceback.format_exc()
         }), 500
+
+
+# ============== Deep DD Interrogation endpoints ==============
+
+@report_bp.route('/dd-interrogation', methods=['POST'])
+def start_dd_interrogation():
+    """
+    Trigger Deep DD interrogation pass (async task)
+
+    Request (JSON):
+        {
+            "simulation_id": "sim_xxxx",
+            "graph_id": "mirofish_xxxx"
+        }
+
+    Returns:
+        {
+            "success": true,
+            "data": {
+                "simulation_id": "sim_xxxx",
+                "task_id": "task_xxxx",
+                "status": "running"
+            }
+        }
+    """
+    try:
+        data = request.get_json() or {}
+
+        simulation_id = data.get('simulation_id')
+        graph_id = data.get('graph_id')
+
+        if not simulation_id:
+            return jsonify({
+                "success": False,
+                "error": t('api.requireSimulationId')
+            }), 400
+
+        if not graph_id:
+            return jsonify({
+                "success": False,
+                "error": t('api.requireGraphId')
+            }), 400
+
+        manager = SimulationManager()
+        state = manager.get_simulation(simulation_id)
+        if not state:
+            return jsonify({
+                "success": False,
+                "error": t('api.simulationNotFound', id=simulation_id)
+            }), 404
+
+        project = ProjectManager.get_project(state.project_id)
+        simulation_requirement = project.simulation_requirement if project else ""
+
+        task_manager = TaskManager()
+        task_id = task_manager.create_task(
+            task_type="dd_interrogation",
+            metadata={
+                "simulation_id": simulation_id,
+                "graph_id": graph_id
+            }
+        )
+
+        dd_progress_store[simulation_id] = {
+            "status": "running",
+            "current_question": 0,
+            "current_domain": "INITIALISING",
+            "found_count": 0,
+            "partial_count": 0,
+            "gap_count": 0,
+            "current_agent": "",
+            "latest_log": "Deep DD interrogation initialising...",
+            "answer_sheet": []
+        }
+
+        current_locale = get_locale()
+
+        def run_dd():
+            set_locale(current_locale)
+            try:
+                task_manager.update_task(
+                    task_id,
+                    status=TaskStatus.PROCESSING,
+                    progress=0,
+                    message="Deep DD interrogation starting"
+                )
+
+                from ..services.zep_tools import ZepToolsService
+                zep = ZepToolsService()
+
+                DOMAINS = [
+                    {
+                        "name": "IDENTITY & STAGE",
+                        "agent": "Lady Kaede",
+                        "questions": [
+                            "What specific milestone triggers the next funding round?",
+                            "Is the one-line description defensible under scrutiny?",
+                            "What is the current TRL and what evidence supports it?",
+                            "Has the company defined its stage claim with precision?",
+                            "What is the founding date and incorporation status?",
+                            "Is there a clear pre-product or post-product distinction?",
+                            "What is the team size and headcount breakdown?",
+                            "Has the company achieved any revenue or paying customers?",
+                            "What is the current funding status and round history?",
+                            "Is the product live or still in development?",
+                            "What is the company's legal entity and jurisdiction?",
+                            "Has the company defined its use of funds clearly?",
+                            "What IP does the company own or license?",
+                            "Are PIIA agreements in place for all founders and staff?",
+                            "Has a cap table been disclosed with full UBO visibility?",
+                            "Are there any outstanding convertible instruments?",
+                            "What vesting schedule is in place for founders?",
+                            "Has the company defined a clear exit strategy?",
+                            "What governance structure is in place?",
+                            "Is there a board of directors or advisors named?",
+                            "What is the company's burn rate and runway?",
+                            "Has the company defined its go-to-market motion?",
+                            "What is the customer acquisition cost at current stage?",
+                            "Is the seed document internally consistent on stage claims?"
+                        ]
+                    },
+                    {
+                        "name": "TECHNOLOGY & INNOVATION",
+                        "agent": "Lord Reyoku",
+                        "questions": [
+                            "What is the hardest unsolved technical problem?",
+                            "Does a clear technology development roadmap exist?",
+                            "What has been demonstrated versus what is promised?",
+                            "Is the core technology genuinely novel or recombinant?",
+                            "What is the replication timeline for a well-funded competitor?",
+                            "Has a third-party technical audit been conducted?",
+                            "What patents are filed, granted, or pending?",
+                            "What is the smart contract audit status if applicable?",
+                            "Is there a clear data strategy and data moat?",
+                            "What open source dependencies create risk?",
+                            "Has the technology been tested in a production environment?",
+                            "What is the scalability ceiling of the current architecture?",
+                            "Is there a Zero to One test that this technology passes?",
+                            "What technical debt exists in the current codebase?",
+                            "Has the company defined its build versus buy strategy?",
+                            "What cybersecurity posture has been documented?",
+                            "Is there a disaster recovery and business continuity plan?",
+                            "What is the technology's dependency on third-party APIs?",
+                            "Has the company defined its data privacy architecture?",
+                            "What monitoring and observability tooling is in place?",
+                            "Is there a defined QA and testing framework?",
+                            "What is the current uptime and reliability record?"
+                        ]
+                    },
+                    {
+                        "name": "JURISDICTION & REGULATION",
+                        "agent": "Shingen Iron Wolf",
+                        "questions": [
+                            "What is the regulatory classification in each target market?",
+                            "Could the product be classified as a collective investment scheme?",
+                            "Is the company subject to AML and KYC obligations?",
+                            "Has a legal opinion been obtained on the regulatory status?",
+                            "What licences are required and which have been obtained?",
+                            "Is there an ongoing or threatened regulatory investigation?",
+                            "How does the company handle cross-border data transfer?",
+                            "What consumer protection obligations apply?",
+                            "Has the company engaged with regulators proactively?",
+                            "What is the VASP classification status if applicable?",
+                            "Is the company subject to Basel III or equivalent constraints?",
+                            "What sanctions screening is in place?",
+                            "Has the company defined its regulatory change management process?",
+                            "What is the liability exposure in each jurisdiction?",
+                            "Are terms of service and privacy policy legally reviewed?",
+                            "Has the company obtained any regulatory sandbox approval?",
+                            "What is the dispute resolution framework?",
+                            "Is there a dedicated compliance officer or team?"
+                        ]
+                    },
+                    {
+                        "name": "CAPITAL & BUSINESS MODEL",
+                        "agent": "Lord Renji",
+                        "questions": [
+                            "What happens if the primary revenue assumption is wrong by 50%?",
+                            "Are unit economics at scale documented and credible?",
+                            "What is the current ARR or MRR?",
+                            "What is the contribution margin per customer?",
+                            "Can the business model survive without continuous external capital?",
+                            "What are the top three cost drivers?",
+                            "Is there a clear path to profitability without heroic assumptions?",
+                            "What is the LTV to CAC ratio at current and projected scale?",
+                            "Has the company stress-tested the model against regulatory shifts?",
+                            "What revenue streams are direct versus indirect?",
+                            "Is pricing strategy documented and validated with customers?",
+                            "What is the gross margin profile at target scale?",
+                            "Has the company defined its Rule of 40 trajectory?",
+                            "What working capital requirements exist at scale?",
+                            "Is there a clear fundraising plan with milestone alignment?",
+                            "What is the EBITDA trend over the last 12 months?",
+                            "Has the company defined its capital efficiency metrics?",
+                            "What debt obligations exist or are planned?",
+                            "Is the funding ask proportionate to the milestones?",
+                            "What is the financial model's sensitivity to churn?",
+                            "Has the company modelled a downside scenario?",
+                            "What is the payback period per customer acquired?",
+                            "Is there a treasury management policy in place?",
+                            "What is the burn multiple at current revenue?",
+                            "Has the company defined its investor return scenario?",
+                            "What is the net revenue retention rate?",
+                            "Is there a defined dividend or distribution policy?",
+                            "What is the break-even timeline under base case?"
+                        ]
+                    },
+                    {
+                        "name": "MARKET & COMPETITION",
+                        "agent": "Lady Asami",
+                        "questions": [
+                            "Who are the direct competitors and what is their funding status?",
+                            "Who are the indirect competitors that could enter this space?",
+                            "Is the market sizing methodology bottom-up or top-down?",
+                            "What assumptions underpin the TAM, SAM, and SOM figures?",
+                            "What is the competitive response time if this company succeeds?",
+                            "Has the company validated market size with primary research?",
+                            "What switching costs exist for customers choosing this product?",
+                            "Is there evidence of product-market fit from early adopters?",
+                            "What is the customer concentration risk?",
+                            "Has the company defined its market entry sequencing?",
+                            "What barriers to entry does the company create over time?",
+                            "Is there a documented competitive intelligence process?",
+                            "What is the net promoter score or equivalent satisfaction metric?",
+                            "Has the company identified its beachhead market precisely?",
+                            "What is the market growth rate and what drives it?",
+                            "Are there network effects that compound the competitive moat?",
+                            "What is the sales cycle length and what drives it?",
+                            "Has the company mapped the full customer journey?",
+                            "What channel partnerships are in place or planned?",
+                            "Is there a documented land and expand strategy?",
+                            "What is the average contract value and how does it trend?",
+                            "Has the company defined its ideal customer profile precisely?",
+                            "What is the churn rate and what are the primary churn drivers?",
+                            "Is there a documented win-loss analysis from sales?",
+                            "What is the pipeline coverage ratio?",
+                            "Has the company defined its category creation or category entry strategy?",
+                            "What is the quota attainment rate of the sales team?",
+                            "What is the time to first value for a new customer?",
+                            "Has the company identified regulatory tailwinds or headwinds?",
+                            "Is there a documented referral or word-of-mouth growth loop?",
+                            "What is the market concentration — fragmented or consolidated?",
+                            "Has the company defined its pricing power over time?"
+                        ]
+                    },
+                    {
+                        "name": "TEAM & CREDIBILITY",
+                        "agent": "Lady Kaede",
+                        "questions": [
+                            "Has the full founding team worked together before?",
+                            "What is the single biggest team gap and the plan to fill it?",
+                            "Do the founders have relevant domain expertise for this sector?",
+                            "Have any co-founders departed and under what circumstances?",
+                            "What is the equity split and is it defensible?",
+                            "Is there evidence of founder-market fit beyond biography?",
+                            "What is the combined execution history of the team?",
+                            "Are there any conflicts of interest among team members?",
+                            "What advisors are named and what is their actual involvement?",
+                            "Has the team demonstrated ability to hire and retain talent?",
+                            "What is the leadership style and decision-making framework?",
+                            "Are there any legal disputes involving founders personally?",
+                            "What is the team's track record on previous commitments?",
+                            "Has the company defined its culture and values explicitly?",
+                            "Is there a succession plan for key person dependency?",
+                            "What is the team's network strength in the target sector?",
+                            "Has the company defined its hiring plan for the next 18 months?",
+                            "Are compensation packages market-competitive?",
+                            "Is there a defined performance management framework?",
+                            "Has the team demonstrated coachability under pressure?",
+                            "What references are available for the founding team?",
+                            "Is there a documented onboarding process for new hires?",
+                            "What is the current employee NPS?",
+                            "Has the company defined its remote or office working policy?"
+                        ]
+                    }
+                ]
+
+                answer_sheet = []
+                q_current = 0
+                found_count = 0
+                partial_count = 0
+                gap_count = 0
+
+                for domain in DOMAINS:
+                    dd_progress_store[simulation_id]["current_domain"] = domain["name"]
+                    dd_progress_store[simulation_id]["current_agent"] = domain["agent"]
+                    dd_progress_store[simulation_id]["latest_log"] = (
+                        f"Domain: {domain['name']} — {domain['agent']} activated"
+                    )
+
+                    for question in domain["questions"]:
+                        try:
+                            result = zep.quick_search(
+                                graph_id=graph_id,
+                                query=question,
+                                limit=5
+                            )
+
+                            facts = result.facts if result.facts else []
+                            fact_count = len(facts)
+
+                            if fact_count >= 3:
+                                status = "found"
+                                found_count += 1
+                            elif fact_count >= 1:
+                                status = "partial"
+                                partial_count += 1
+                            else:
+                                status = "gap"
+                                gap_count += 1
+
+                            answer_sheet.append({
+                                "domain": domain["name"],
+                                "agent": domain["agent"],
+                                "question": question,
+                                "status": status,
+                                "evidence": facts[:3],
+                                "evidence_count": fact_count
+                            })
+
+                            q_current += 1
+                            dd_progress_store[simulation_id].update({
+                                "current_question": q_current,
+                                "found_count": found_count,
+                                "partial_count": partial_count,
+                                "gap_count": gap_count,
+                                "latest_log": (
+                                    f"Q{q_current}: {question[:60]}... "
+                                    f"[{status.upper()}]"
+                                )
+                            })
+
+                            task_manager.update_task(
+                                task_id,
+                                progress=int((q_current / 148) * 100),
+                                message=f"DD Q{q_current}/148 — {domain['name']}"
+                            )
+
+                        except Exception as qe:
+                            logger.warning(f"DD question failed: {str(qe)}")
+                            answer_sheet.append({
+                                "domain": domain["name"],
+                                "agent": domain["agent"],
+                                "question": question,
+                                "status": "gap",
+                                "evidence": [],
+                                "evidence_count": 0
+                            })
+                            q_current += 1
+                            gap_count += 1
+
+                dd_progress_store[simulation_id].update({
+                    "status": "complete",
+                    "current_question": q_current,
+                    "found_count": found_count,
+                    "partial_count": partial_count,
+                    "gap_count": gap_count,
+                    "latest_log": "DD interrogation complete — answer sheet compiled",
+                    "answer_sheet": answer_sheet
+                })
+
+                _save_dd_answer_sheet(simulation_id, answer_sheet)
+
+                task_manager.complete_task(
+                    task_id,
+                    result={
+                        "simulation_id": simulation_id,
+                        "total_questions": q_current,
+                        "found": found_count,
+                        "partial": partial_count,
+                        "gaps": gap_count,
+                        "status": "complete"
+                    }
+                )
+
+            except Exception as e:
+                logger.error(f"DD interrogation failed: {str(e)}")
+                dd_progress_store[simulation_id]["status"] = "failed"
+                dd_progress_store[simulation_id]["latest_log"] = f"Error: {str(e)}"
+                task_manager.fail_task(task_id, str(e))
+
+        thread = threading.Thread(target=run_dd, daemon=True)
+        thread.start()
+
+        return jsonify({
+            "success": True,
+            "data": {
+                "simulation_id": simulation_id,
+                "task_id": task_id,
+                "status": "running",
+                "message": "Deep DD interrogation started"
+            }
+        })
+
+    except Exception as e:
+        logger.error(f"Failed to start DD interrogation: {str(e)}")
+        return jsonify({
+            "success": False,
+            "error": str(e),
+            "traceback": traceback.format_exc()
+        }), 500
+
+
+@report_bp.route('/dd-progress', methods=['GET'])
+def get_dd_progress():
+    """
+    Get live Deep DD interrogation progress
+
+    Query params:
+        simulation_id: simulation ID
+
+    Returns:
+        {
+            "success": true,
+            "data": {
+                "status": "running|complete|failed",
+                "current_question": 42,
+                "current_domain": "CAPITAL & BUSINESS MODEL",
+                "found_count": 28,
+                "partial_count": 9,
+                "gap_count": 5,
+                "current_agent": "Lord Renji",
+                "latest_log": "Q42: Unit economics..."
+            }
+        }
+    """
+    try:
+        simulation_id = request.args.get('simulation_id')
+        if not simulation_id:
+            return jsonify({
+                "success": False,
+                "error": t('api.requireSimulationId')
+            }), 400
+
+        progress = dd_progress_store.get(simulation_id)
+        if not progress:
+            return jsonify({
+                "success": False,
+                "error": "No DD interrogation found for this simulation"
+            }), 404
+
+        safe_progress = {k: v for k, v in progress.items() if k != "answer_sheet"}
+
+        return jsonify({
+            "success": True,
+            "data": safe_progress
+        })
+
+    except Exception as e:
+        logger.error(f"Failed to get DD progress: {str(e)}")
+        return jsonify({
+            "success": False,
+            "error": str(e)
+        }), 500
+
+
+@report_bp.route('/dd-answer-sheet', methods=['GET'])
+def get_dd_answer_sheet():
+    """
+    Download the DD answer sheet JSON for a simulation
+    Query params:
+        simulation_id: simulation ID
+    Returns JSON file download
+    """
+    try:
+        simulation_id = request.args.get('simulation_id')
+        if not simulation_id:
+            return jsonify({
+                "success": False,
+                "error": t('api.requireSimulationId')
+            }), 400
+
+        sheet_path = _get_dd_answer_sheet_path(simulation_id)
+
+        if not os.path.exists(sheet_path):
+            progress = dd_progress_store.get(simulation_id, {})
+            answer_sheet = progress.get("answer_sheet", [])
+            if not answer_sheet:
+                return jsonify({
+                    "success": False,
+                    "error": "DD answer sheet not found for this simulation"
+                }), 404
+            import tempfile, json as _json
+            with tempfile.NamedTemporaryFile(
+                mode='w', suffix='.json', delete=False, encoding='utf-8'
+            ) as f:
+                _json.dump(answer_sheet, f, ensure_ascii=False, indent=2)
+                sheet_path = f.name
+
+        return send_file(
+            sheet_path,
+            as_attachment=True,
+            download_name=f"dd_answer_sheet_{simulation_id}.json",
+            mimetype='application/json'
+        )
+
+    except Exception as e:
+        logger.error(f"Failed to get DD answer sheet: {str(e)}")
+        return jsonify({
+            "success": False,
+            "error": str(e)
+        }), 500
+
+
+def _get_dd_answer_sheet_path(simulation_id: str) -> str:
+    """Get the file path for a DD answer sheet"""
+    return os.path.join(
+        Config.UPLOAD_FOLDER, 'dd_sheets',
+        f"dd_{simulation_id}.json"
+    )
+
+
+def _save_dd_answer_sheet(simulation_id: str, answer_sheet: list) -> None:
+    """Save DD answer sheet to disk"""
+    import json as _json
+    sheet_dir = os.path.join(Config.UPLOAD_FOLDER, 'dd_sheets')
+    os.makedirs(sheet_dir, exist_ok=True)
+    path = _get_dd_answer_sheet_path(simulation_id)
+    with open(path, 'w', encoding='utf-8') as f:
+        _json.dump(answer_sheet, f, ensure_ascii=False, indent=2)
+    logger.info(f"DD answer sheet saved: {path}")
+            
