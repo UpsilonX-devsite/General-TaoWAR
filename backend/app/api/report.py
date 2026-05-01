@@ -1322,15 +1322,15 @@ result = zep.quick_search(
                             facts = result.facts if result.facts else []
                             fact_count = len(facts)
 
-                            if fact_count >= 3:
-                                status = "found"
-                                found_count += 1
-                            elif fact_count >= 1:
-                                status = "partial"
-                                partial_count += 1
-                            else:
-                                status = "gap"
-                                gap_count += 1
+                           if fact_count >= 2:
+    status = "found"
+    found_count += 1
+elif fact_count >= 1:
+    status = "partial"
+    partial_count += 1
+else:
+    status = "gap"
+    gap_count += 1
 
                             answer_sheet.append({
                                 "domain": domain["name"],
