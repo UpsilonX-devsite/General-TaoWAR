@@ -1313,14 +1313,15 @@ def start_dd_interrogation():
                         try:
                             company_hint = simulation_requirement.split('\n')[0][:80]
 enriched_query = f"{company_hint} — {question}"
-result = zep.quick_search(
+result = zep.insight_forge(
     graph_id=graph_id,
     query=enriched_query,
-    limit=5
+    simulation_requirement=simulation_requirement,
+    report_context=f"Domain: {domain['name']} — Agent: {domain['agent']}",
+    max_sub_queries=2
 )
-
-                            facts = result.facts if result.facts else []
-                            fact_count = len(facts)
+facts = result.semantic_facts if result.semantic_facts else []
+fact_count = len(facts)
 
                            if fact_count >= 2:
     status = "found"
@@ -1333,13 +1334,14 @@ else:
     gap_count += 1
 
                             answer_sheet.append({
-                                "domain": domain["name"],
-                                "agent": domain["agent"],
-                                "question": question,
-                                "status": status,
-                                "evidence": facts[:3],
-                                "evidence_count": fact_count
-                            })
+    "domain": domain["name"],
+    "agent": domain["agent"],
+    "question": question,
+    "enriched_query": enriched_query,
+    "status": status,
+    "evidence": facts[:3],
+    "evidence_count": fact_count
+})
 
                             q_current += 1
                             dd_progress_store[simulation_id].update({
