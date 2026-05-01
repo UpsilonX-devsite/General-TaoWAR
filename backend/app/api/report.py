@@ -1367,6 +1367,7 @@ else:
                                 "domain": domain["name"],
                                 "agent": domain["agent"],
                                 "question": question,
+                                "enriched_query": question,
                                 "status": "gap",
                                 "evidence": [],
                                 "evidence_count": 0
