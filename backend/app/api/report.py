@@ -131,10 +131,10 @@ def generate_report():
             try:
                 task_manager.update_task(
                     task_id,
-                    status=TaskStatus.PROCESSING,
-                    progress=0,
-                    message=t('api.initReportAgent')
+                    progress=int((q_current / 148) * 100),
+                    message=f"DD Q{q_current}/148 — {domain['name']}"
                 )
+                _time.sleep(1.5)
                 
                 # 创建Report Agent
                 agent = ReportAgent(
@@ -1099,6 +1099,7 @@ def start_dd_interrogation():
         current_locale = get_locale()
 
         def run_dd():
+            import time as _time
             set_locale(current_locale)
             try:
                 task_manager.update_task(
