@@ -1626,7 +1626,8 @@ def start_dd_interrogation():
                         "gaps": gap_count,
                         "potential": potential_count,
                         "company_stage": company_stage,
-                        "status": "complete"
+                        "status": "complete",
+                        "total_questions": dd_progress_store.get(simulation_id, {}).get("current_question", 0)
                     }
                 )
 
