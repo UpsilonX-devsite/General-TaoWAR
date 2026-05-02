@@ -1368,12 +1368,29 @@ def start_dd_interrogation():
                 STOP_WORDS = {
                     "what","is","the","are","has","have","does","do",
                     "been","a","an","in","of","for","to","and","or",
-                    "its","their","any","been","been","this","that",
-                    "with","from","how","who","which","where","when",
-                    "will","can","could","should","would","there","be",
-                    "if","not","it","at","on","by","as","all","each",
-                    "per","only","also","both","more","most","least",
-                    "fully","clearly","currently","specifically","whether"
+                    "its","their","any","this","that","with","from",
+                    "how","who","which","where","when","will","can",
+                    "could","should","would","there","be","if","not",
+                    "it","at","on","by","as","all","each","per","only",
+                    "also","both","more","most","least","fully","clearly",
+                    "currently","specifically","whether","company","companies",
+                    "investor","investors","investment","founder","founders",
+                    "market","markets","business","model","stage","current",
+                    "plan","plans","strategy","strategic","rate","rates",
+                    "defined","define","documented","document","evidence",
+                    "demonstrated","demonstrate","identify","identified",
+                    "established","establish","ensure","ensuring","clear",
+                    "specific","explicitly","implicit","noted","note",
+                    "indicate","indicates","indicate","relevant","required",
+                    "require","exist","existing","exists","place","based",
+                    "provide","provides","provided","including","included",
+                    "across","within","between","against","toward","around",
+                    "potential","capital","team","product","customer","customers",
+                    "growth","revenue","funding","raise","raised","round",
+                    "series","seed","early","late","next","first","last",
+                    "year","years","month","months","quarter","quarters",
+                    "number","numbers","amount","amounts","level","levels",
+                    "high","low","strong","weak","good","bad","better","best"
                 }
 
                 def extract_keywords(text):
@@ -1384,14 +1401,36 @@ def start_dd_interrogation():
                     keywords = extract_keywords(question)
                     if not keywords:
                         return [], 0
+
+                    # Build two-word phrases from the question
+                    # for stronger matching
+                    words = question.lower().replace("?","").split()
+                    meaningful = [w for w in words if w not in STOP_WORDS and len(w) > 3]
+                    phrases = []
+                    for i in range(len(meaningful) - 1):
+                        phrases.append(f"{meaningful[i]} {meaningful[i+1]}")
+
                     hits = []
                     for fact in facts:
                         fact_lower = fact.lower()
-                        matches = sum(1 for kw in keywords if kw in fact_lower)
-                        if matches >= 2:
+
+                        # Phrase match — strongest signal
+                        phrase_hits = sum(
+                            1 for ph in phrases if ph in fact_lower
+                        )
+                        if phrase_hits >= 1:
                             hits.append(fact)
-                        elif matches == 1 and len(keywords) <= 4:
+                            continue
+
+                        # Keyword match — require more matches
+                        # for shorter keyword lists
+                        kw_matches = sum(
+                            1 for kw in keywords if kw in fact_lower
+                        )
+                        min_required = max(3, len(keywords) // 2)
+                        if kw_matches >= min_required:
                             hits.append(fact)
+
                     return hits, len(hits)
 
                 # ── Stage threshold checker ───────────────────────────
