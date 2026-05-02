@@ -1620,7 +1620,7 @@ def start_dd_interrogation():
                     task_id,
                     result={
                         "simulation_id": simulation_id,
-                        "total_questions": q_current,
+                        "total_questions": dd_progress_store.get(simulation_id, {}).get("current_question", 0)
                         "found": found_count,
                         "partial": partial_count,
                         "gaps": gap_count,
