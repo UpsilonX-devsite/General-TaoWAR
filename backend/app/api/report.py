@@ -134,7 +134,7 @@ def generate_report():
                     progress=int((q_current / 148) * 100),
                     message=f"DD Q{q_current}/148 — {domain['name']}"
                 )
-                _time.sleep(0.5)
+                _time.sleep(0.1)
                 
                 # 创建Report Agent
                 agent = ReportAgent(
