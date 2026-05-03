@@ -1408,6 +1408,7 @@ def start_dd_interrogation():
                                     f"DD Q{q_current}/{total_questions} — "
                                     f"{domain['name']}"
                                 )
+                            )
 
                         except Exception as qe:
                             logger.warning(
