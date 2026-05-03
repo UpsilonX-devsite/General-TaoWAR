@@ -1433,6 +1433,8 @@ def start_dd_interrogation():
                     "found_count": found_count,
                     "partial_count": partial_count,
                     "gap_count": gap_count,
+                    "potential_count": potential_count,
+                    "company_stage": company_stage,
                     "latest_log": "DD interrogation complete — answer sheet compiled",
                     "answer_sheet": answer_sheet
                 })
