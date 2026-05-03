@@ -131,10 +131,10 @@ def generate_report():
             try:
                 task_manager.update_task(
                     task_id,
-                    progress=int((q_current / 148) * 100),
-                    message=f"DD Q{q_current}/148 — {domain['name']}"
+                    status=TaskStatus.PROCESSING,
+                    progress=0,
+                    message=t('api.initReportAgent')
                 )
-                _time.sleep(0.1)
                 
                 # 创建Report Agent
                 agent = ReportAgent(
@@ -1567,16 +1567,17 @@ def start_dd_interrogation():
 
                             q_current += 1
                             dd_progress_store[simulation_id].update({
-                    "status": "complete",
-                    "current_question": q_current,
-                    "found_count": found_count,
-                    "partial_count": partial_count,
-                    "gap_count": gap_count,
-                    "potential_count": potential_count,
-                    "company_stage": company_stage,
-                    "latest_log": "DD interrogation complete — answer sheet compiled",
-                    "answer_sheet": answer_sheet
-                })
+                                "current_question": q_current,
+                                "found_count": found_count,
+                                "partial_count": partial_count,
+                                "gap_count": gap_count,
+                                "potential_count": potential_count,
+                                "latest_log": (
+                                    f"Q{q_current}: "
+                                    f"{question[:55]}... "
+                                    f"[{status.upper()}]"
+                                )
+                            })
 
                             task_manager.update_task(
                                 task_id,
