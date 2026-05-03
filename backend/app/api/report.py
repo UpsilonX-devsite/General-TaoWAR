@@ -1049,6 +1049,9 @@ def start_dd_interrogation():
 
         simulation_id = data.get('simulation_id')
         graph_id = data.get('graph_id')
+        company_stage_selection = data.get(
+            'company_stage_selection', 'series_stage'
+        )
 
         if not simulation_id:
             return jsonify({
@@ -1112,192 +1115,11 @@ def start_dd_interrogation():
                 from ..services.zep_tools import ZepToolsService
                 zep = ZepToolsService()
 
-                DOMAINS = [
-                    {
-                        "name": "IDENTITY & STAGE",
-                        "agent": "Lady Kaede",
-                        "questions": [
-                            {"text": "What specific milestone triggers the next funding round?", "stage_threshold": "all"},
-                            {"text": "Is the one-line description defensible under scrutiny?", "stage_threshold": "all"},
-                            {"text": "What is the current TRL and what evidence supports it?", "stage_threshold": "all"},
-                            {"text": "Has the company defined its stage claim with precision?", "stage_threshold": "all"},
-                            {"text": "What is the founding date and incorporation status?", "stage_threshold": "all"},
-                            {"text": "Is there a clear pre-product or post-product distinction?", "stage_threshold": "all"},
-                            {"text": "What is the team size and headcount breakdown?", "stage_threshold": "all"},
-                            {"text": "Has the company achieved any revenue or paying customers?", "stage_threshold": "seed"},
-                            {"text": "What is the current funding status and round history?", "stage_threshold": "all"},
-                            {"text": "Is the product live or still in development?", "stage_threshold": "all"},
-                            {"text": "What is the company legal entity and jurisdiction?", "stage_threshold": "all"},
-                            {"text": "Has the company defined its use of funds clearly?", "stage_threshold": "all"},
-                            {"text": "What IP does the company own or license?", "stage_threshold": "all"},
-                            {"text": "Are PIIA agreements in place for all founders and staff?", "stage_threshold": "seed"},
-                            {"text": "Has a cap table been disclosed with full UBO visibility?", "stage_threshold": "seed"},
-                            {"text": "Are there any outstanding convertible instruments?", "stage_threshold": "seed"},
-                            {"text": "What vesting schedule is in place for founders?", "stage_threshold": "seed"},
-                            {"text": "Has the company defined a clear exit strategy?", "stage_threshold": "series_a"},
-                            {"text": "What governance structure is in place?", "stage_threshold": "seed"},
-                            {"text": "Is there a board of directors or advisors named?", "stage_threshold": "seed"},
-                            {"text": "What is the company burn rate and runway?", "stage_threshold": "seed"},
-                            {"text": "Has the company defined its go-to-market motion?", "stage_threshold": "all"},
-                            {"text": "What is the customer acquisition cost at current stage?", "stage_threshold": "seed"},
-                            {"text": "Is the seed document internally consistent on stage claims?", "stage_threshold": "all"}
-                        ]
-                    },
-                    {
-                        "name": "TECHNOLOGY & INNOVATION",
-                        "agent": "Lord Reyoku",
-                        "questions": [
-                            {"text": "What is the hardest unsolved technical problem?", "stage_threshold": "all"},
-                            {"text": "Does a clear technology development roadmap exist?", "stage_threshold": "all"},
-                            {"text": "What has been demonstrated versus what is promised?", "stage_threshold": "all"},
-                            {"text": "Is the core technology genuinely novel or recombinant?", "stage_threshold": "all"},
-                            {"text": "What is the replication timeline for a well-funded competitor?", "stage_threshold": "all"},
-                            {"text": "Has a third-party technical audit been conducted?", "stage_threshold": "seed"},
-                            {"text": "What patents are filed granted or pending?", "stage_threshold": "seed"},
-                            {"text": "What is the smart contract audit status if applicable?", "stage_threshold": "seed"},
-                            {"text": "Is there a clear data strategy and data moat?", "stage_threshold": "all"},
-                            {"text": "What open source dependencies create risk?", "stage_threshold": "seed"},
-                            {"text": "Has the technology been tested in a production environment?", "stage_threshold": "seed"},
-                            {"text": "What is the scalability ceiling of the current architecture?", "stage_threshold": "seed"},
-                            {"text": "Is there a Zero to One test that this technology passes?", "stage_threshold": "all"},
-                            {"text": "What technical debt exists in the current codebase?", "stage_threshold": "seed"},
-                            {"text": "Has the company defined its build versus buy strategy?", "stage_threshold": "seed"},
-                            {"text": "What cybersecurity posture has been documented?", "stage_threshold": "series_a"},
-                            {"text": "Is there a disaster recovery and business continuity plan?", "stage_threshold": "series_a"},
-                            {"text": "What is the technology dependency on third-party APIs?", "stage_threshold": "seed"},
-                            {"text": "Has the company defined its data privacy architecture?", "stage_threshold": "series_a"},
-                            {"text": "What monitoring and observability tooling is in place?", "stage_threshold": "series_a"},
-                            {"text": "Is there a defined QA and testing framework?", "stage_threshold": "seed"},
-                            {"text": "What is the current uptime and reliability record?", "stage_threshold": "series_a"}
-                        ]
-                    },
-                    {
-                        "name": "JURISDICTION & REGULATION",
-                        "agent": "Shingen Iron Wolf",
-                        "questions": [
-                            {"text": "What is the regulatory classification in each target market?", "stage_threshold": "all"},
-                            {"text": "Could the product be classified as a collective investment scheme?", "stage_threshold": "all"},
-                            {"text": "Is the company subject to AML and KYC obligations?", "stage_threshold": "all"},
-                            {"text": "Has a legal opinion been obtained on the regulatory status?", "stage_threshold": "seed"},
-                            {"text": "What licences are required and which have been obtained?", "stage_threshold": "seed"},
-                            {"text": "Is there an ongoing or threatened regulatory investigation?", "stage_threshold": "all"},
-                            {"text": "How does the company handle cross-border data transfer?", "stage_threshold": "series_a"},
-                            {"text": "What consumer protection obligations apply?", "stage_threshold": "seed"},
-                            {"text": "Has the company engaged with regulators proactively?", "stage_threshold": "seed"},
-                            {"text": "What is the VASP classification status if applicable?", "stage_threshold": "all"},
-                            {"text": "Is the company subject to Basel III or equivalent constraints?", "stage_threshold": "series_a"},
-                            {"text": "What sanctions screening is in place?", "stage_threshold": "seed"},
-                            {"text": "Has the company defined its regulatory change management process?", "stage_threshold": "series_a"},
-                            {"text": "What is the liability exposure in each jurisdiction?", "stage_threshold": "seed"},
-                            {"text": "Are terms of service and privacy policy legally reviewed?", "stage_threshold": "seed"},
-                            {"text": "Has the company obtained any regulatory sandbox approval?", "stage_threshold": "seed"},
-                            {"text": "What is the dispute resolution framework?", "stage_threshold": "series_a"},
-                            {"text": "Is there a dedicated compliance officer or team?", "stage_threshold": "series_a"}
-                        ]
-                    },
-                    {
-                        "name": "CAPITAL & BUSINESS MODEL",
-                        "agent": "Lord Renji",
-                        "questions": [
-                            {"text": "What happens if the primary revenue assumption is wrong by 50%?", "stage_threshold": "all"},
-                            {"text": "Are unit economics at scale documented and credible?", "stage_threshold": "seed"},
-                            {"text": "What is the current ARR or MRR?", "stage_threshold": "seed"},
-                            {"text": "What is the contribution margin per customer?", "stage_threshold": "series_a"},
-                            {"text": "Can the business model survive without continuous external capital?", "stage_threshold": "all"},
-                            {"text": "What are the top three cost drivers?", "stage_threshold": "all"},
-                            {"text": "Is there a clear path to profitability without heroic assumptions?", "stage_threshold": "all"},
-                            {"text": "What is the LTV to CAC ratio at current and projected scale?", "stage_threshold": "series_a"},
-                            {"text": "Has the company stress-tested the model against regulatory shifts?", "stage_threshold": "seed"},
-                            {"text": "What revenue streams are direct versus indirect?", "stage_threshold": "all"},
-                            {"text": "Is pricing strategy documented and validated with customers?", "stage_threshold": "seed"},
-                            {"text": "What is the gross margin profile at target scale?", "stage_threshold": "seed"},
-                            {"text": "Has the company defined its Rule of 40 trajectory?", "stage_threshold": "series_a"},
-                            {"text": "What working capital requirements exist at scale?", "stage_threshold": "series_a"},
-                            {"text": "Is there a clear fundraising plan with milestone alignment?", "stage_threshold": "all"},
-                            {"text": "What is the EBITDA trend over the last 12 months?", "stage_threshold": "series_b"},
-                            {"text": "Has the company defined its capital efficiency metrics?", "stage_threshold": "series_a"},
-                            {"text": "What debt obligations exist or are planned?", "stage_threshold": "seed"},
-                            {"text": "Is the funding ask proportionate to the milestones?", "stage_threshold": "all"},
-                            {"text": "What is the financial model sensitivity to churn?", "stage_threshold": "series_a"},
-                            {"text": "Has the company modelled a downside scenario?", "stage_threshold": "seed"},
-                            {"text": "What is the payback period per customer acquired?", "stage_threshold": "series_a"},
-                            {"text": "Is there a treasury management policy in place?", "stage_threshold": "series_a"},
-                            {"text": "What is the burn multiple at current revenue?", "stage_threshold": "seed"},
-                            {"text": "Has the company defined its investor return scenario?", "stage_threshold": "seed"},
-                            {"text": "What is the net revenue retention rate?", "stage_threshold": "series_a"},
-                            {"text": "Is there a defined dividend or distribution policy?", "stage_threshold": "series_b"},
-                            {"text": "What is the break-even timeline under base case?", "stage_threshold": "all"}
-                        ]
-                    },
-                    {
-                        "name": "MARKET & COMPETITION",
-                        "agent": "Lady Asami",
-                        "questions": [
-                            {"text": "Who are the direct competitors and what is their funding status?", "stage_threshold": "all"},
-                            {"text": "Who are the indirect competitors that could enter this space?", "stage_threshold": "all"},
-                            {"text": "Is the market sizing methodology bottom-up or top-down?", "stage_threshold": "all"},
-                            {"text": "What assumptions underpin the TAM SAM and SOM figures?", "stage_threshold": "all"},
-                            {"text": "What is the competitive response time if this company succeeds?", "stage_threshold": "all"},
-                            {"text": "Has the company validated market size with primary research?", "stage_threshold": "all"},
-                            {"text": "What switching costs exist for customers choosing this product?", "stage_threshold": "seed"},
-                            {"text": "Is there evidence of product-market fit from early adopters?", "stage_threshold": "seed"},
-                            {"text": "What is the customer concentration risk?", "stage_threshold": "series_a"},
-                            {"text": "Has the company defined its market entry sequencing?", "stage_threshold": "all"},
-                            {"text": "What barriers to entry does the company create over time?", "stage_threshold": "all"},
-                            {"text": "Is there a documented competitive intelligence process?", "stage_threshold": "series_a"},
-                            {"text": "What is the net promoter score or equivalent satisfaction metric?", "stage_threshold": "series_a"},
-                            {"text": "Has the company identified its beachhead market precisely?", "stage_threshold": "all"},
-                            {"text": "What is the market growth rate and what drives it?", "stage_threshold": "all"},
-                            {"text": "Are there network effects that compound the competitive moat?", "stage_threshold": "all"},
-                            {"text": "What is the sales cycle length and what drives it?", "stage_threshold": "seed"},
-                            {"text": "Has the company mapped the full customer journey?", "stage_threshold": "seed"},
-                            {"text": "What channel partnerships are in place or planned?", "stage_threshold": "seed"},
-                            {"text": "Is there a documented land and expand strategy?", "stage_threshold": "series_a"},
-                            {"text": "What is the average contract value and how does it trend?", "stage_threshold": "series_a"},
-                            {"text": "Has the company defined its ideal customer profile precisely?", "stage_threshold": "all"},
-                            {"text": "What is the churn rate and what are the primary churn drivers?", "stage_threshold": "series_a"},
-                            {"text": "Is there a documented win-loss analysis from sales?", "stage_threshold": "series_a"},
-                            {"text": "What is the pipeline coverage ratio?", "stage_threshold": "series_a"},
-                            {"text": "Has the company defined its category creation or entry strategy?", "stage_threshold": "all"},
-                            {"text": "What is the quota attainment rate of the sales team?", "stage_threshold": "series_b"},
-                            {"text": "What is the time to first value for a new customer?", "stage_threshold": "series_a"},
-                            {"text": "Has the company identified regulatory tailwinds or headwinds?", "stage_threshold": "all"},
-                            {"text": "Is there a documented referral or word-of-mouth growth loop?", "stage_threshold": "seed"},
-                            {"text": "What is the market concentration fragmented or consolidated?", "stage_threshold": "all"},
-                            {"text": "Has the company defined its pricing power over time?", "stage_threshold": "seed"}
-                        ]
-                    },
-                    {
-                        "name": "TEAM & CREDIBILITY",
-                        "agent": "Lady Kaede",
-                        "questions": [
-                            {"text": "Has the full founding team worked together before?", "stage_threshold": "all"},
-                            {"text": "What is the single biggest team gap and the plan to fill it?", "stage_threshold": "all"},
-                            {"text": "Do the founders have relevant domain expertise for this sector?", "stage_threshold": "all"},
-                            {"text": "Have any co-founders departed and under what circumstances?", "stage_threshold": "all"},
-                            {"text": "What is the equity split and is it defensible?", "stage_threshold": "all"},
-                            {"text": "Is there evidence of founder-market fit beyond biography?", "stage_threshold": "all"},
-                            {"text": "What is the combined execution history of the team?", "stage_threshold": "all"},
-                            {"text": "Are there any conflicts of interest among team members?", "stage_threshold": "all"},
-                            {"text": "What advisors are named and what is their actual involvement?", "stage_threshold": "all"},
-                            {"text": "Has the team demonstrated ability to hire and retain talent?", "stage_threshold": "seed"},
-                            {"text": "What is the leadership style and decision-making framework?", "stage_threshold": "seed"},
-                            {"text": "Are there any legal disputes involving founders personally?", "stage_threshold": "all"},
-                            {"text": "What is the team track record on previous commitments?", "stage_threshold": "all"},
-                            {"text": "Has the company defined its culture and values explicitly?", "stage_threshold": "series_a"},
-                            {"text": "Is there a succession plan for key person dependency?", "stage_threshold": "series_a"},
-                            {"text": "What is the team network strength in the target sector?", "stage_threshold": "all"},
-                            {"text": "Has the company defined its hiring plan for the next 18 months?", "stage_threshold": "seed"},
-                            {"text": "Are compensation packages market-competitive?", "stage_threshold": "series_a"},
-                            {"text": "Is there a defined performance management framework?", "stage_threshold": "series_a"},
-                            {"text": "Has the team demonstrated coachability under pressure?", "stage_threshold": "all"},
-                            {"text": "What references are available for the founding team?", "stage_threshold": "all"},
-                            {"text": "Is there a documented onboarding process for new hires?", "stage_threshold": "series_a"},
-                            {"text": "What is the current employee NPS?", "stage_threshold": "series_b"},
-                            {"text": "Has the company defined its remote or office working policy?", "stage_threshold": "series_a"}
-                        ]
-                    }
-                ]
+                from ..services.dd_question_sets import get_domain_set
+                DOMAINS = get_domain_set(company_stage_selection)
+                total_questions = sum(
+                    len(d["questions"]) for d in DOMAINS
+                )
 
                 answer_sheet = []
                 q_current = 0
@@ -1581,12 +1403,11 @@ def start_dd_interrogation():
 
                             task_manager.update_task(
                                 task_id,
-                                progress=int((q_current / 148) * 100),
+                                progress=int((q_current / total_questions) * 100),
                                 message=(
-                                    f"DD Q{q_current}/148 — "
+                                    f"DD Q{q_current}/{total_questions} — "
                                     f"{domain['name']}"
                                 )
-                            )
 
                         except Exception as qe:
                             logger.warning(
