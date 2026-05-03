@@ -1169,21 +1169,47 @@ def start_dd_interrogation():
                     f"fetching full simulation graph..."
                 )
 
-                # ── Single panorama fetch ─────────────────────────────
-                try:
-                    panorama = zep.panorama_search(
-                        graph_id=graph_id,
-                        query=simulation_requirement,
-                        include_expired=False
+                # ── Primary source: extracted project text ────────────
+                all_facts = []
+                source_label = "unknown"
+
+                project_id = state.project_id
+                extracted_text = ProjectManager.get_extracted_text(project_id)
+
+                if extracted_text and len(extracted_text.strip()) > 100:
+                    import re as _re
+                    chunks = _re.split(r'\n{2,}', extracted_text)
+                    all_facts = [
+                        chunk.strip()
+                        for chunk in chunks
+                        if len(chunk.strip()) > 40
+                    ]
+                    source_label = f"project text ({len(all_facts)} chunks)"
+                    logger.info(
+                        f"DD source: extracted project text — "
+                        f"{len(all_facts)} chunks from project {project_id}"
                     )
-                    all_facts = panorama.active_facts or []
-                except Exception as pe:
-                    logger.warning(f"Panorama fetch failed: {pe}")
-                    all_facts = []
+
+                if not all_facts:
+                    logger.warning(
+                        "No extracted project text found — "
+                        "falling back to panorama search"
+                    )
+                    try:
+                        panorama = zep.panorama_search(
+                            graph_id=graph_id,
+                            query=simulation_requirement,
+                            include_expired=False
+                        )
+                        all_facts = panorama.active_facts or []
+                        source_label = f"panorama search ({len(all_facts)} facts)"
+                    except Exception as pe:
+                        logger.warning(f"Panorama fetch also failed: {pe}")
+                        all_facts = []
+                        source_label = "no source available"
 
                 dd_progress_store[simulation_id]["latest_log"] = (
-                    f"Graph loaded — {len(all_facts)} facts indexed. "
-                    f"Beginning interrogation..."
+                    f"Source: {source_label} — beginning interrogation..."
                 )
 
                 # ── Keyword extractor ─────────────────────────────────
