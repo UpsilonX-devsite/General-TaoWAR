@@ -1212,123 +1212,102 @@ def start_dd_interrogation():
                     f"Source: {source_label} — beginning interrogation..."
                 )
 
-                # ── Keyword extractor ─────────────────────────────────
-                STOP_WORDS = {
-                    "what","is","the","are","has","have","does","do",
-                    "been","a","an","in","of","for","to","and","or",
-                    "its","their","any","this","that","with","from",
-                    "how","who","which","where","when","will","can",
-                    "could","should","would","there","be","if","not",
-                    "it","at","on","by","as","all","each","per","only",
-                    "also","both","more","most","least","fully","clearly",
-                    "currently","specifically","whether","company","companies",
-                    "investor","investors","investment","founder","founders",
-                    "market","markets","business","model","stage","current",
-                    "plan","plans","strategy","strategic","rate","rates",
-                    "defined","define","documented","document","evidence",
-                    "demonstrated","demonstrate","identify","identified",
-                    "established","establish","ensure","ensuring","clear",
-                    "specific","explicitly","implicit","noted","note",
-                    "indicate","indicates","indicate","relevant","required",
-                    "require","exist","existing","exists","place","based",
-                    "provide","provides","provided","including","included",
-                    "across","within","between","against","toward","around",
-                    "potential","capital","team","product","customer","customers",
-                    "growth","revenue","funding","raise","raised","round",
-                    "series","seed","early","late","next","first","last",
-                    "year","years","month","months","quarter","quarters",
-                    "number","numbers","amount","amounts","level","levels",
-                    "high","low","strong","weak","good","bad","better","best"
-                }
-
-                def extract_keywords(text):
-                    words = text.lower().replace("?","").replace(",","").split()
-                    return [w for w in words if w not in STOP_WORDS and len(w) > 3]
-
-                def score_question(question, facts):
-                    keywords = extract_keywords(question)
-                    if not keywords:
-                        return [], 0
-
-                    # Build two-word phrases from the question
-                    # for stronger matching
-                    words = question.lower().replace("?","").split()
-                    meaningful = [w for w in words if w not in STOP_WORDS and len(w) > 3]
-                    phrases = []
-                    for i in range(len(meaningful) - 1):
-                        phrases.append(f"{meaningful[i]} {meaningful[i+1]}")
-
-                    hits = []
-                    for fact in facts:
-                        fact_lower = fact.lower()
-
-                        # Phrase match — strongest signal
-                        phrase_hits = sum(
-                            1 for ph in phrases if ph in fact_lower
-                        )
-                        if phrase_hits >= 1:
-                            hits.append(fact)
-                            continue
-
-                        # Keyword match — require more matches
-                        # for shorter keyword lists
-                        kw_matches = sum(
-                            1 for kw in keywords if kw in fact_lower
-                        )
-                        min_required = max(3, len(keywords) // 2)
-                        if kw_matches >= min_required:
-                            hits.append(fact)
-
-                    return hits, len(hits)
-
-                # ── Stage threshold checker ───────────────────────────
-                STAGE_ORDER = {
-                    "all": 0,
-                    "pre_seed": 1,
-                    "seed": 2,
-                    "series_a": 3,
-                    "series_b": 4
-                }
-
-                def is_stage_appropriate(threshold):
-                    return (
-                        STAGE_ORDER.get(company_stage, 2) >=
-                        STAGE_ORDER.get(threshold, 0)
-                    )
-
-                # ── Potential framing generator ───────────────────────
+                # ── LLM-based domain scorer ───────────────────────────
+                # One LLM call per domain (6 calls total).
+                # Each call receives all document chunks relevant to that
+                # domain plus all questions, and returns structured JSON
+                # with status + evidence per question.
                 from ..utils.llm_client import LLMClient
                 _llm = LLMClient()
 
-                def generate_potential_framing(question, domain_name, facts):
-                    context = "\n".join(facts[:5]) if facts else "No direct evidence found."
-                    company_hint = simulation_requirement.split('\n')[0][:120]
+                # Pre-join all facts into a single searchable corpus.
+                # Limit to 12,000 chars to stay within context safely.
+                corpus = "\n\n".join(all_facts)[:12000]
+
+                company_hint = simulation_requirement.split('\n')[0][:200]
+
+                def score_domain_with_llm(domain, corpus, company_stage):
+                    """
+                    Ask the LLM to assess all questions in one domain
+                    against the source document corpus in a single call.
+                    Returns a list of result dicts, one per question.
+                    """
+                    questions_block = "\n".join(
+                        f"{i+1}. {q['text']}"
+                        for i, q in enumerate(domain["questions"])
+                    )
+
+                    stage_order = {
+                        "all": 0, "pre_seed": 1,
+                        "seed": 2, "series_a": 3, "series_b": 4
+                    }
+                    current_stage_rank = stage_order.get(company_stage, 2)
+
+                    prompt = f"""You are a senior investment analyst conducting due diligence on a {company_stage.replace('_', ' ')} stage company.
+
+Company context: {company_hint}
+Detected stage: {company_stage.replace('_', ' ').upper()}
+
+SOURCE DOCUMENTS (all available evidence):
+---
+{corpus}
+---
+
+DOMAIN: {domain['name']}
+AGENT: {domain['agent']}
+
+For each question below, assess the source documents and return a JSON response.
+
+Questions:
+{questions_block}
+
+Return a JSON object with this exact structure:
+{{
+  "results": [
+    {{
+      "question_index": 1,
+      "status": "found|partial|gap|potential",
+      "evidence": ["direct quote or paraphrase from source doc", ...],
+      "evidence_count": 0,
+      "reasoning": "one sentence explaining the classification"
+    }},
+    ...
+  ]
+}}
+
+Classification rules:
+- "found": question is clearly and explicitly addressed in the source documents with strong evidence
+- "partial": question is touched on but only partially answered or the evidence is weak/indirect  
+- "gap": question is appropriate for this stage but not addressed in the source documents
+- "potential": question is not yet applicable at {company_stage.replace('_', ' ')} stage (only use for questions clearly beyond current stage)
+
+Evidence must be direct quotes or close paraphrases from the source documents — not invented.
+Return one result object per question, in the same order as the questions list.
+Return ONLY the JSON object, no other text."""
+
                     try:
-                        prompt = (
-                            f"You are a senior investment analyst reviewing a "
-                            f"{company_stage.replace('_',' ')} stage company.\n\n"
-                            f"Company context: {company_hint}\n\n"
-                            f"Simulation evidence available:\n{context}\n\n"
-                            f"Due diligence question (not yet applicable at this "
-                            f"stage): {question}\n\n"
-                            f"Write ONE concise sentence (max 40 words) in this "
-                            f"format: 'If [company] achieves [specific milestone "
-                            f"from evidence], then [this metric/question] becomes "
-                            f"[specific investor signal].' "
-                            f"Be specific to this company. Do not be generic."
-                        )
-                        response = _llm.chat(
+                        result = _llm.chat_json(
                             messages=[{"role": "user", "content": prompt}],
-                            temperature=0.3,
-                            max_tokens=80
+                            temperature=0.1,
+                            max_tokens=4096
                         )
-                        return response.strip() if response else ""
-                    except Exception:
-                        return (
-                            f"At {company_stage.replace('_',' ')} stage this "
-                            f"metric is not yet applicable — address at next "
-                            f"funding milestone."
+                        return result.get("results", [])
+                    except Exception as le:
+                        logger.warning(
+                            f"LLM domain scoring failed for "
+                            f"{domain['name']}: {le}"
                         )
+                        # Fallback: mark all as gap
+                        return [
+                            {
+                                "question_index": i + 1,
+                                "status": "gap",
+                                "evidence": [],
+                                "evidence_count": 0,
+                                "reasoning": "LLM scoring unavailable"
+                            }
+                            for i in range(len(domain["questions"]))
+                        ]
 
                 # ── Main interrogation loop ───────────────────────────
                 for domain in DOMAINS:
@@ -1340,116 +1319,132 @@ def start_dd_interrogation():
                     )
                     dd_progress_store[simulation_id]["latest_log"] = (
                         f"Domain: {domain['name']} — "
-                        f"{domain['agent']} activated"
+                        f"{domain['agent']} analysing..."
                     )
 
-                    for q_item in domain["questions"]:
+                    # Single LLM call for the entire domain
+                    llm_results = score_domain_with_llm(
+                        domain, corpus, company_stage
+                    )
+
+                    # Build a lookup by question index (1-based)
+                    results_by_index = {
+                        r["question_index"]: r
+                        for r in llm_results
+                        if isinstance(r, dict)
+                    }
+
+                    for i, q_item in enumerate(domain["questions"]):
                         question = q_item["text"]
                         threshold = q_item.get("stage_threshold", "all")
+                        llm_result = results_by_index.get(i + 1, {})
 
-                        try:
-                            hits, hit_count = score_question(
-                                question, all_facts
-                            )
+                        # Use LLM status, but enforce potential for
+                        # stage-inappropriate questions regardless
+                        stage_order = {
+                            "all": 0, "pre_seed": 1,
+                            "seed": 2, "series_a": 3, "series_b": 4
+                        }
+                        stage_appropriate = (
+                            stage_order.get(company_stage, 2) >=
+                            stage_order.get(threshold, 0)
+                        )
 
-                            if not is_stage_appropriate(threshold):
-                                framing = generate_potential_framing(
-                                    question, domain["name"], hits
+                        evidence = llm_result.get("evidence", [])
+                        evidence_count = len(evidence)
+
+                        if not stage_appropriate:
+                            status = "potential"
+                            potential_count += 1
+                            # Generate forward-looking framing
+                            context = "\n".join(evidence[:3]) if evidence else corpus[:500]
+                            try:
+                                framing_prompt = (
+                                    f"Company: {company_hint}\n"
+                                    f"Stage: {company_stage.replace('_',' ')}\n"
+                                    f"Question not yet applicable: {question}\n\n"
+                                    f"Write ONE sentence (max 40 words): "
+                                    f"'If [company] achieves [milestone], "
+                                    f"then [this question] becomes [investor signal].'"
                                 )
-                                status = "potential"
-                                potential_count += 1
-                                answer_sheet.append({
-                                    "domain": domain["name"],
-                                    "agent": domain["agent"],
-                                    "question": question,
-                                    "stage_threshold": threshold,
-                                    "company_stage": company_stage,
-                                    "status": "potential",
-                                    "stage_note": (
-                                        f"{company_stage.replace('_',' ').title()} "
-                                        f"stage — this question is not yet applicable"
-                                    ),
-                                    "potential_framing": framing,
-                                    "evidence": hits[:3],
-                                    "evidence_count": hit_count
-                                })
-                            elif hit_count >= 2:
-                                status = "found"
-                                found_count += 1
-                                answer_sheet.append({
-                                    "domain": domain["name"],
-                                    "agent": domain["agent"],
-                                    "question": question,
-                                    "stage_threshold": threshold,
-                                    "company_stage": company_stage,
-                                    "status": "found",
-                                    "evidence": hits[:3],
-                                    "evidence_count": hit_count
-                                })
-                            elif hit_count == 1:
-                                status = "partial"
-                                partial_count += 1
-                                answer_sheet.append({
-                                    "domain": domain["name"],
-                                    "agent": domain["agent"],
-                                    "question": question,
-                                    "stage_threshold": threshold,
-                                    "company_stage": company_stage,
-                                    "status": "partial",
-                                    "evidence": hits[:3],
-                                    "evidence_count": hit_count
-                                })
-                            else:
-                                status = "gap"
-                                gap_count += 1
-                                answer_sheet.append({
-                                    "domain": domain["name"],
-                                    "agent": domain["agent"],
-                                    "question": question,
-                                    "stage_threshold": threshold,
-                                    "company_stage": company_stage,
-                                    "status": "gap",
-                                    "evidence": [],
-                                    "evidence_count": 0
-                                })
-
-                            q_current += 1
-                            dd_progress_store[simulation_id].update({
-                                "current_question": q_current,
-                                "found_count": found_count,
-                                "partial_count": partial_count,
-                                "gap_count": gap_count,
-                                "potential_count": potential_count,
-                                "latest_log": (
-                                    f"Q{q_current}: "
-                                    f"{question[:55]}... "
-                                    f"[{status.upper()}]"
+                                framing = _llm.chat(
+                                    messages=[{"role": "user", "content": framing_prompt}],
+                                    temperature=0.3,
+                                    max_tokens=80
                                 )
-                            })
-
-                            task_manager.update_task(
-                                task_id,
-                                progress=int((q_current / total_questions) * 100),
-                                message=(
-                                    f"DD Q{q_current}/{total_questions} — "
-                                    f"{domain['name']}"
+                                framing = framing.strip()
+                            except Exception:
+                                framing = (
+                                    f"At {company_stage.replace('_',' ')} stage "
+                                    f"this metric is not yet applicable."
                                 )
-                            )
-
-                        except Exception as qe:
-                            logger.warning(
-                                f"DD question failed: {str(qe)}"
-                            )
                             answer_sheet.append({
                                 "domain": domain["name"],
                                 "agent": domain["agent"],
                                 "question": question,
-                                "status": "gap",
-                                "evidence": [],
-                                "evidence_count": 0
+                                "stage_threshold": threshold,
+                                "company_stage": company_stage,
+                                "status": "potential",
+                                "stage_note": (
+                                    f"{company_stage.replace('_',' ').title()} "
+                                    f"stage — not yet applicable"
+                                ),
+                                "potential_framing": framing,
+                                "evidence": evidence[:3],
+                                "evidence_count": evidence_count
                             })
-                            q_current += 1
-                            gap_count += 1
+
+                        else:
+                            status = llm_result.get("status", "gap")
+                            # Normalise status to valid values
+                            if status not in ("found", "partial", "gap"):
+                                status = "gap"
+
+                            if status == "found":
+                                found_count += 1
+                            elif status == "partial":
+                                partial_count += 1
+                            else:
+                                gap_count += 1
+
+                            answer_sheet.append({
+                                "domain": domain["name"],
+                                "agent": domain["agent"],
+                                "question": question,
+                                "stage_threshold": threshold,
+                                "company_stage": company_stage,
+                                "status": status,
+                                "evidence": evidence[:3],
+                                "evidence_count": evidence_count,
+                                "reasoning": llm_result.get("reasoning", "")
+                            })
+
+                        q_current += 1
+                        dd_progress_store[simulation_id].update({
+                            "current_question": q_current,
+                            "found_count": found_count,
+                            "partial_count": partial_count,
+                            "gap_count": gap_count,
+                            "potential_count": potential_count,
+                            "latest_log": (
+                                f"Q{q_current}: "
+                                f"{question[:55]}... "
+                                f"[{status.upper()}]"
+                            )
+                        })
+
+                        task_manager.update_task(
+                            task_id,
+                            progress=int(
+                                (q_current / total_questions) * 100
+                            ),
+                            message=(
+                                f"DD Q{q_current}/{total_questions} — "
+                                f"{domain['name']}"
+                            )
+                        )
+
+                        _time.sleep(0.05)
 
                 
 
